@@ -51,7 +51,6 @@ class AgentOrchestrator:
         """
         # Store user name and ID in context
         self.context_manager.set_user_context("user_name", user_name)
-        print("user_name:",user_name);
         if user_id:
             self.context_manager.set_user_context("user_id", user_id)
         
@@ -60,28 +59,17 @@ class AgentOrchestrator:
         
         # Get LLM response
         assistant_response = self._get_llm_response()
-        print("\n" + "="*70)
-        print("🤖 LLM RAW RESPONSE:")
-        print("="*70)
-        print(assistant_response)
-        print("="*70 + "\n")
         
         # Check if response contains tool calls
         tool_calls = self._extract_tool_calls(assistant_response)
-        print("🔧 EXTRACTED TOOL CALLS:", tool_calls)
         
         if tool_calls:
             # Don't show the tool call response to user - it's internal processing
             # Execute tools and get results
-            tool_results = self._execute_tools(tool_calls)            
-            print("tool_results:",tool_results)
-
-
-            
+            tool_results = self._execute_tools(tool_calls)
             
             # Add tool results to context and get final response
             tool_results_text = self._format_tool_results(tool_results)
-            print("tool_results_text:",tool_results_text)
 
             self.context_manager.add_message("system", f"Tool Results:\n{tool_results_text}")
             
@@ -120,14 +108,12 @@ class AgentOrchestrator:
             
             # Get final response incorporating tool results
             final_response = self._get_llm_response()
-            # print("final_response:",final_response)
             
             # Check if LLM is STILL trying to call tools (it shouldn't!)
             max_retries = 2
             retry_count = 0
             
             while "<tool_call>" in final_response and retry_count < max_retries:
-                print(f"WARNING: LLM tried to call tools in final response (attempt {retry_count + 1}). Stripping and retrying...")
                 
                 # Strip tool calls first
                 cleaned_response = self._strip_tool_calls_from_text(final_response)
@@ -162,12 +148,9 @@ class AgentOrchestrator:
                 # There's garbage before the actual text, remove it
                 final_response = final_response[match.start():]
             
-            print("final_response:",final_response)
-            
             # If still empty after all this, create a fallback response from tool results
             if len(final_response.strip()) < 10:
                 final_response = self._create_fallback_response(tool_results)
-                print(f"⚠️ Using fallback response: {final_response}")
             
             self.context_manager.add_message("assistant", final_response)
             
@@ -203,12 +186,8 @@ class AgentOrchestrator:
         pattern = r'<tool_call>\s*<function>(.*?)</function>\s*<args>(.*?)</args>\s*</tool_call>'
         matches = re.findall(pattern, response, re.DOTALL)
         
-        print(f"🔍 Regex found {len(matches)} tool call(s) in response")
-        
         for function_name, args_str in matches:
             function_name = function_name.strip()
-            print(f"   - Function: {function_name}")
-            print(f"   - Args (raw): {args_str.strip()[:100]}...")
             try:
                 # Parse JSON args
                 args = json.loads(args_str.strip())
@@ -216,10 +195,8 @@ class AgentOrchestrator:
                     "function": function_name,
                     "args": args
                 })
-                print(f"   ✅ Successfully parsed args")
             except json.JSONDecodeError as e:
                 # Try to extract args manually if JSON parsing fails
-                print(f"   ❌ Could not parse args for {function_name}: {e}")
                 continue
         
         return tool_calls
@@ -285,14 +262,10 @@ class AgentOrchestrator:
             if function_name in ["book_reservation", "get_user_reservations"]:
                 if "user_name" not in args:
                     args["user_name"] = self.context_manager.get_user_context("user_name", "Guest")
-                    print(f"✅ Auto-added user_name: '{args['user_name']}'")
-                else:
-                    print(f"⚠️ LLM provided user_name: '{args['user_name']}' (should be auto-added!)")
                 if "user_id" not in args:
                     user_id = self.context_manager.get_user_context("user_id")
                     if user_id:
                         args["user_id"] = user_id
-                        print(f"✅ Auto-added user_id: {user_id}")
             
             # Handle date/time parsing
             args = self._parse_temporal_args(args)
