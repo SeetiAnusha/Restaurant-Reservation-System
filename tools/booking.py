@@ -17,6 +17,7 @@ class BookingTool:
         Args:
             restaurant_id: int
             user_name: str
+            user_id: int (optional)
             date: str (YYYY-MM-DD format)
             time: str (HH:MM format)
             party_size: int
@@ -29,6 +30,7 @@ class BookingTool:
         try:
             restaurant_id = int(args.get('restaurant_id'))
             user_name = args.get('user_name')
+            user_id = args.get('user_id')
             date = args.get('date')
             time = args.get('time')
             party_size = int(args.get('party_size'))
@@ -49,9 +51,11 @@ class BookingTool:
                 date=date,
                 time=time,
                 party_size=party_size,
+                user_id=user_id,
                 user_email=user_email,
                 special_requests=special_requests
             )
+            print("result:",result);
             
             if result['success']:
                 message = f"🎉 Reservation confirmed!\n\n"
@@ -99,15 +103,17 @@ class BookingTool:
         Get all reservations for a user
         
         Args:
-            user_name: str
+            user_name: str (optional if user_id provided)
+            user_id: int (optional if user_name provided)
         """
         try:
             user_name = args.get('user_name')
+            user_id = args.get('user_id')
             
-            if not user_name:
-                return {"success": False, "error": "User name required"}
+            if not user_name and not user_id:
+                return {"success": False, "error": "User name or ID required"}
             
-            reservations = self.db.get_user_reservations(user_name)
+            reservations = self.db.get_user_reservations(user_name=user_name, user_id=user_id)
             
             formatted_reservations = []
             for res in reservations:

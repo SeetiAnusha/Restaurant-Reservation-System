@@ -24,10 +24,42 @@ class AvailabilityTool:
             Dict with availability status and details
         """
         try:
-            restaurant_id = int(args.get('restaurant_id'))
+            # Validate that wrong arguments aren't passed
+            if 'query' in args or 'cuisine' in args or 'location' in args:
+                return {
+                    "success": False,
+                    "error": "Wrong tool! Use 'recommend_restaurants' to search by name/location/cuisine. This tool only checks availability for a specific restaurant ID."
+                }
+            
+            # Get restaurant_id
+            restaurant_id_raw = args.get('restaurant_id')
+            
+            if restaurant_id_raw is None:
+                return {
+                    "success": False,
+                    "error": "Missing restaurant_id. Use 'recommend_restaurants' first to find the restaurant and get its ID."
+                }
+            
+            # Try to convert to int
+            try:
+                restaurant_id = int(restaurant_id_raw)
+            except (ValueError, TypeError):
+                return {
+                    "success": False,
+                    "error": f"Invalid restaurant_id: '{restaurant_id_raw}'. Must be a NUMBER (e.g., 123), not a name. Use 'recommend_restaurants' to search by name."
+                }
+            
             date = args.get('date')
             time = args.get('time')
-            party_size = int(args.get('party_size'))
+            party_size_raw = args.get('party_size')
+            
+            if party_size_raw is None:
+                return {
+                    "success": False,
+                    "error": "Missing party_size parameter"
+                }
+            
+            party_size = int(party_size_raw)
             
             # Validate inputs
             if not all([restaurant_id, date, time, party_size]):

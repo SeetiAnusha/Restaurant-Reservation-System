@@ -25,7 +25,12 @@ CUISINES = [
 CITIES = [
     "New York, NY", "Los Angeles, CA", "Chicago, IL", 
     "Houston, TX", "Phoenix, AZ", "Philadelphia, PA",
-    "San Antonio, TX", "San Diego, CA", "Dallas, TX", "Austin, TX"
+    "San Antonio, TX", "San Diego, CA", "Dallas, TX", "Austin, TX",
+    "Koramangala, Bangalore", "Indiranagar, Bangalore", "Whitefield, Bangalore",
+    "HSR Layout, Bangalore", "Jayanagar, Bangalore", "MG Road, Bangalore",
+    "Electronic City, Bangalore", "Marathahalli, Bangalore", "BTM Layout, Bangalore",
+    "JP Nagar, Bangalore", "Malleshwaram, Bangalore", "Rajajinagar, Bangalore",
+    "Yelahanka, Bangalore", "Bannerghatta Road, Bangalore", "Sarjapur Road, Bangalore"
 ]
 
 PRICE_RANGES = ["$", "$$", "$$$", "$$$$"]
@@ -243,6 +248,15 @@ def main():
     """Main execution"""
     print("🏗️  Creating database schema...")
     conn = create_database()
+    
+    # Clear old restaurant and availability data
+    print("🧹 Clearing old data...")
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM availability")
+    cursor.execute("DELETE FROM reservations WHERE restaurant_id NOT IN (SELECT id FROM restaurants WHERE name LIKE 'GoodFoods%')")
+    cursor.execute("DELETE FROM restaurants")
+    conn.commit()
+    print("✅ Old data cleared")
     
     print("🎲 Generating restaurant data...")
     generate_restaurants(conn)

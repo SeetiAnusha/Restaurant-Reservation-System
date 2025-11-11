@@ -5,17 +5,33 @@ Pre-compute and cache restaurant embeddings for semantic search
 
 import json
 import numpy as np
-from sentence_transformers import SentenceTransformer
-from sklearn.metrics.pairwise import cosine_similarity
 from typing import List, Dict
 from data.db_manager import DatabaseManager
 
+# Try to import sentence transformers, fallback to keyword search if not available
+try:
+    from sentence_transformers import SentenceTransformer
+    from sklearn.metrics.pairwise import cosine_similarity
+    EMBEDDINGS_AVAILABLE = True
+except (ImportError, OSError) as e:
+    print(f"⚠️ Embeddings not available: {e}")
+    print("📝 Using keyword-based search instead")
+    EMBEDDINGS_AVAILABLE = False
+
 class EmbeddingManager:
     def __init__(self, model_name: str = "all-MiniLM-L6-v2"):
-        self.model = SentenceTransformer(model_name)
         self.db = DatabaseManager()
         self.restaurant_embeddings = {}
         self.restaurants_cache = []
+        self.use_embeddings = EMBEDDINGS_AVAILABLE
+        
+        if self.use_embeddings:
+            try:
+                self.model = SentenceTransformer(model_name)
+            except Exception as e:
+                print(f"⚠️ Failed to load embedding model: {e}")
+                print("📝 Falling back to keyword search")
+                self.use_embeddings = False
     
     def generate_restaurant_text(self, restaurant: Dict) -> str:
         """Generate text representation of restaurant for embedding"""
@@ -30,11 +46,14 @@ class EmbeddingManager:
     
     def compute_embeddings(self):
         """Compute embeddings for all restaurants"""
-        print("🔄 Computing restaurant embeddings...")
-        
         restaurants = self.db.get_restaurants()
         self.restaurants_cache = restaurants
         
+        if not self.use_embeddings:
+            print("📝 Using keyword-based search (embeddings not available)")
+            return
+        
+        print("🔄 Computing restaurant embeddings...")
         texts = [self.generate_restaurant_text(r) for r in restaurants]
         embeddings = self.model.encode(texts, show_progress_bar=True)
         
@@ -43,8 +62,63 @@ class EmbeddingManager:
         
         print(f"✅ Computed embeddings for {len(restaurants)} restaurants")
     
+    def _keyword_search(self, query: str, top_k: int = 5, filters: Dict = None) -> List[Dict]:
+        """Fallback keyword-based search when embeddings aren't available"""
+        if not self.restaurants_cache:
+            self.restaurants_cache = self.db.get_restaurants()
+        
+        # Apply filters first
+        filtered_restaurants = self.restaurants_cache
+        if filters:
+            filtered_restaurants = [
+                r for r in self.restaurants_cache
+                if self._matches_filters(r, filters)
+            ]
+        
+        if not filtered_restaurants:
+            return []
+        
+        # Simple keyword matching
+        query_lower = query.lower()
+        query_words = set(query_lower.split())
+        
+        scores = []
+        for restaurant in filtered_restaurants:
+            text = self.generate_restaurant_text(restaurant).lower()
+            
+            # Count matching words
+            text_words = set(text.split())
+            matches = len(query_words.intersection(text_words))
+            
+            # Boost for exact phrase matches
+            if query_lower in text:
+                matches += 5
+            
+            # Boost for name/cuisine matches
+            if query_lower in restaurant['name'].lower():
+                matches += 10
+            if query_lower in restaurant['cuisine'].lower():
+                matches += 8
+            
+            scores.append((restaurant, matches))
+        
+        # Sort by score
+        scores.sort(key=lambda x: x[1], reverse=True)
+        
+        # Return top_k with scores
+        results = []
+        for restaurant, score in scores[:top_k]:
+            result = restaurant.copy()
+            result['similarity_score'] = float(score) / 10.0  # Normalize
+            results.append(result)
+        
+        return results
+    
     def semantic_search(self, query: str, top_k: int = 5, filters: Dict = None) -> List[Dict]:
-        """Search restaurants using semantic similarity"""
+        """Search restaurants using semantic similarity or keyword matching"""
+        if not self.use_embeddings:
+            return self._keyword_search(query, top_k, filters)
+        
         if not self.restaurant_embeddings:
             self.compute_embeddings()
         

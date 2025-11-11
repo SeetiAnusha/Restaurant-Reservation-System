@@ -24,35 +24,54 @@ st.set_page_config(
     page_title="GoodFoods Reservation Assistant",
     page_icon="🍽️",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="collapsed"
 )
 
-# Custom CSS
+# Custom CSS with beautiful colors
 st.markdown("""
 <style>
     .main-header {
-        font-size: 2.5rem;
+        font-size: 2.8rem;
         font-weight: bold;
-        color: #FF6B6B;
+        background: linear-gradient(135deg, #FF6B6B 0%, #4ECDC4 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
         text-align: center;
-        margin-bottom: 1rem;
+        margin-bottom: 0.5rem;
     }
+    
     .sub-header {
-        font-size: 1.2rem;
+        font-size: 1.3rem;
         color: #666;
         text-align: center;
         margin-bottom: 2rem;
     }
+    
     .stChatMessage {
         padding: 1rem;
-        border-radius: 10px;
+        border-radius: 15px;
+        margin-bottom: 1rem;
     }
+    
     .success-box {
-        padding: 1rem;
-        background-color: #d4edda;
-        border-left: 4px solid #28a745;
-        border-radius: 5px;
+        padding: 1.2rem;
+        background: linear-gradient(135deg, #51CF66 0%, #3BC55B 100%);
+        color: white;
+        border-radius: 12px;
         margin: 1rem 0;
+        font-weight: 500;
+        box-shadow: 0 4px 15px rgba(81, 207, 102, 0.3);
+    }
+    
+    .stButton>button {
+        border-radius: 10px;
+        font-weight: 600;
+        transition: all 0.3s ease;
+    }
+    
+    .stButton>button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 5px 15px rgba(0,0,0,0.2);
     }
 </style>
 """, unsafe_allow_html=True)
@@ -70,11 +89,98 @@ if "orchestrator" not in st.session_state:
     model_name = os.getenv("MODEL_NAME", "llama-3.3-70b-versatile")
     st.session_state.orchestrator = AgentOrchestrator(api_key, model_name)
 
-if "user_name" not in st.session_state:
-    st.session_state.user_name = "Guest"
-
 if "db" not in st.session_state:
     st.session_state.db = DatabaseManager()
+
+# Authentication state
+if "authenticated" not in st.session_state:
+    st.session_state.authenticated = False
+    st.session_state.user = None
+    st.session_state.show_signup = False
+
+def login_page():
+    """Display login page"""
+    st.markdown('<div class="main-header">🍽️ GoodFoods</div>', unsafe_allow_html=True)
+    st.markdown('<div class="sub-header">AI Reservation Assistant</div>', unsafe_allow_html=True)
+    
+    col1, col2, col3 = st.columns([1, 2, 1])
+    
+    with col2:
+        if not st.session_state.show_signup:
+            # Login Form
+            st.markdown("### 🔐 Login")
+            
+            with st.form("login_form"):
+                username = st.text_input("Username", key="login_username")
+                password = st.text_input("Password", type="password", key="login_password")
+                submit = st.form_submit_button("Login", use_container_width=True)
+                
+                if submit:
+                    if username and password:
+                        result = st.session_state.db.authenticate_user(username, password)
+                        if result["success"]:
+                            st.session_state.authenticated = True
+                            st.session_state.user = result["user"]
+                            st.success("✅ Login successful!")
+                            st.rerun()
+                        else:
+                            st.error(f"❌ {result['error']}")
+                    else:
+                        st.warning("⚠️ Please enter both username and password")
+            
+            st.markdown("---")
+            if st.button("📝 Create New Account", use_container_width=True):
+                st.session_state.show_signup = True
+                st.rerun()
+            
+            st.markdown("---")
+            st.info("💡 **Demo Account:**\n\nUsername: `demo`\n\nPassword: `demo123`")
+        
+        else:
+            # Signup Form
+            st.markdown("### 📝 Create Account")
+            
+            with st.form("signup_form"):
+                new_username = st.text_input("Username", key="signup_username")
+                new_email = st.text_input("Email", key="signup_email")
+                new_password = st.text_input("Password", type="password", key="signup_password")
+                confirm_password = st.text_input("Confirm Password", type="password", key="confirm_password")
+                full_name = st.text_input("Full Name (optional)", key="signup_fullname")
+                phone = st.text_input("Phone (optional)", key="signup_phone")
+                
+                submit = st.form_submit_button("Create Account", use_container_width=True)
+                
+                if submit:
+                    if not new_username or not new_email or not new_password:
+                        st.warning("⚠️ Please fill in all required fields")
+                    elif new_password != confirm_password:
+                        st.error("❌ Passwords don't match")
+                    elif len(new_password) < 6:
+                        st.error("❌ Password must be at least 6 characters")
+                    else:
+                        result = st.session_state.db.create_user(
+                            username=new_username,
+                            email=new_email,
+                            password=new_password,
+                            full_name=full_name,
+                            phone=phone
+                        )
+                        if result["success"]:
+                            st.success("✅ Account created! Please login.")
+                            st.session_state.show_signup = False
+                            st.rerun()
+                        else:
+                            st.error(f"❌ {result['error']}")
+            
+            st.markdown("---")
+            if st.button("🔙 Back to Login", use_container_width=True):
+                st.session_state.show_signup = False
+                st.rerun()
+
+# Check authentication
+if not st.session_state.authenticated:
+    login_page()
+    st.stop()
 
 # Sidebar
 with st.sidebar:
@@ -82,21 +188,21 @@ with st.sidebar:
     st.markdown("**AI Reservation Assistant**")
     st.markdown("---")
     
-    # User name input
-    user_name = st.text_input("Your Name", value=st.session_state.user_name, key="user_name_input")
-    if user_name != st.session_state.user_name:
-        st.session_state.user_name = user_name
-    
+    # User info
+    user = st.session_state.user
+    print("user:",user)
+    st.markdown(f"👤 **{user['full_name'] or user['username']}**")
+    st.markdown(f"📧 {user['email']}")
     st.markdown("---")
     
     # Quick actions
     st.markdown("### 🎯 Quick Actions")
     
-    if st.button("📋 View My Reservations", use_container_width=True):
+    if st.button("📋 View Reservations", use_container_width=True):
         prompt = "Show me my reservations"
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.spinner("Checking reservations..."):
-            response = st.session_state.orchestrator.process_message(prompt, st.session_state.user_name)
+            response = st.session_state.orchestrator.process_message(prompt, user['username'], user['id'])
             st.session_state.messages.append({"role": "assistant", "content": response})
         st.rerun()
     
@@ -104,7 +210,7 @@ with st.sidebar:
         prompt = "I'm looking for restaurant recommendations"
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.spinner("Finding restaurants..."):
-            response = st.session_state.orchestrator.process_message(prompt, st.session_state.user_name)
+            response = st.session_state.orchestrator.process_message(prompt, user['username'], user['id'])
             st.session_state.messages.append({"role": "assistant", "content": response})
         st.rerun()
     
@@ -127,12 +233,21 @@ with st.sidebar:
         st.rerun()
     
     st.markdown("---")
+    
+    # Logout button
+    if st.button("🚪 Logout", use_container_width=True):
+        st.session_state.authenticated = False
+        st.session_state.user = None
+        st.session_state.messages = []
+        st.session_state.orchestrator.reset_conversation()
+        st.rerun()
+    
+    st.markdown("---")
     st.markdown("### 💡 Try asking:")
     st.markdown("""
     - "Find me Italian restaurants"
     - "Book a table for 4 tomorrow at 7pm"
     - "Show me my reservations"
-    - "Cancel my booking"
     - "Recommend romantic restaurants"
     """)
 
@@ -155,7 +270,12 @@ if prompt := st.chat_input("Ask me anything about reservations..."):
     # Get assistant response
     with st.chat_message("assistant"):
         with st.spinner("Thinking..."):
-            response = st.session_state.orchestrator.process_message(prompt, st.session_state.user_name)
+            # Pass both username and user_id for proper database linking
+            response = st.session_state.orchestrator.process_message(
+                prompt, 
+                st.session_state.user['username'],
+                st.session_state.user['id']
+            )
             st.markdown(response)
     
     # Add assistant message
@@ -164,8 +284,9 @@ if prompt := st.chat_input("Ask me anything about reservations..."):
 # Welcome message if no conversation yet
 if len(st.session_state.messages) == 0:
     with st.chat_message("assistant"):
+        user_display_name = st.session_state.user['full_name'] or st.session_state.user['username']
         welcome_message = f"""
-👋 Hi {st.session_state.user_name}! Welcome to GoodFoods!
+👋 Hi {user_display_name}! Welcome to GoodFoods!
 
 I'm your AI reservation assistant. I can help you:
 - 🔍 Find the perfect restaurant
